@@ -213,116 +213,112 @@ app.post("/api/items", auth, (req, res) => {
     }
 })
 
-app.delete("/api/quests/", auth, (req, res) => {
-    try {
-        const { id } = req.params
-        const quests = db.prepare("SELECT * FROM quests WHERE id = ?").get(id)
-        if (!quests) return res.status(404).json({ error: "Квест не найден" })
 
-    db.prepare('DELETE FROM quests WHERE id = ?').run(id)
-    return res.status(200).json({ message: 'Deleted successfully' })
-    } catch (error) {
-        console.error(error)
-        res.status(500).json({ error: "Something went wrong" })
-    }
-})
-
-app.delete("/api/books/:id", auth, (req, res) => {
-    try {
-        const { id } = req.params
-        const book = db.prepare("SELECT * FROM books WHERE id = ?").get(id)
-        if (!book) return res.status(404).json({ error: "Книга не найдена" })
-
-        if (book.userId !== req.user.id || req.user.role !== "admin") return res.status(200).json({ message: '' })
-    db.prepare('DELETE FROM books WHERE id = ?').run(id)
-    return res.status(200).json({ message: 'Deleted successfully' })
-    } catch (error) {
-        console.error(error)
-        res.status(500).json({ error: "Something went wrong" })
-    }
-})
-
-app.get("/api/quests/:id", (req, res) => {
+app.delete("/api/quests/:id", auth, (req, res) => {
     try {
         const { id } = req.params
         const quest = db.prepare("SELECT * FROM quests WHERE id = ?").get(id)
-        if (!quest) return res.status(404).json({ error: "Квест не найдена" })
-        const quest = db.prepare("SELECT * FROM quests WHERE bookId = ?").get(id)
-        return res.status(200).json({ ...quests, items })
+        if (!quest) return res.status(404).json({ error: "Квест не найден" })
+        if (!(['admin'].includes(req.user.role) || req.user.id === quest.createdBy)) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
+        db.prepare('DELETE FROM quests WHERE id = ?').run(id)
+        return res.status(200).json({ message: 'Удаление завершено!' })
     } catch (error) {
         console.error(error)
         res.status(500).json({ error: "Something went wrong" })
     }
 })
-
-app.get("/api/books/:id/review", (req, res) => {
+app.put("/api/quests/:id", auth, (req, res) => {
     try {
         const { id } = req.params
-        const book = db.prepare("SELECT * FROM books WHERE id = ?").get(id)
-        if (!book) return res.status(404).json({ error: "Книга не найдена" })
-        const review = db.prepare("SELECT * FROM review WHERE bookId = ?").all(id)
-        return res.status(200).json(review)
-    } catch (error) {
-        console.error(error)
-        res.status(500).json({ error: "Something went wrong" })
-    }
-})
-
-app.get("/api/admin/users", auth, (req, res) => {
-    try {
-        if (req.user.role !== "admin")
-            return res.status(403).json({ error: "u aren't admin" })
-        const user = db.prepare("SELECT * FROM users").all()
-        return res.status(200).json(user)
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({ error: "Something went wrong" })
-    }
-})
-
-app.delete("/api/admin/users/:id", auth, (req, res) => {
-    try {
-
-        if (req.user.role !== "admin")
-            return res.status(403).json({ error: "u aren't admin" })
-        const { id } = req.params
-        const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id)
-        if (!user) return res.status(404).json({ error: "Юзер не найден" })
-
-        db.prepare('DELETE FROM users WHERE id = ?').run(id)
-        return res.status(200).json({ message: 'Deleted successfully' })
-    } catch (error) {
-        console.error(error)
-        res.status(500).json({ error: "Something went wrong" })
-    }
-})
-
-app.put("/api/books/:id", auth, (req, res) => {
-    try {
-        const { id } = req.params
-        const item = db.prepare("SELECT * FROM books WHERE id = ?").get(id)
+        const item = db.prepare("SELECT * FROM quests WHERE id = ?").get(id)
         if (!item) {
-            return res.status(404).json({ error: "Book not found" });
+            return res.status(404).json({ error: "quests not found" });
+        }
+        if (req.user.id !== item.userId || !(['admin'].includes(req.user.role))) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
         }
         const newItem = { ...item, ...req.body }
-
-        console.log(newItem);
-        
-        const updateStmt = db.prepare("UPDATE books SET title = ?, author = ?, year = ?, genre = ?, description = ? WHERE id = ? ")
-        const result = updateStmt.run(
+        const updateStmt = db.prepare("UPDATE quests SET title = ?, place = ?, lvl = ?, time = ?, awardId =?, description = ? WHERE id = ? ")
+        updateStmt.run(
             newItem.title,
-            newItem.author,
-            newItem.year,
-            newItem.genre,
+            newItem.place,
+            newItem.lvl,
+            newItem.time,
+            newItem.awardId,
             newItem.description,
             id
         );
-        const newItemFromDB = db.prepare("SELECT * FROM books WHERE id = ?").get(id)
+        const newItemFromDB = db.prepare("SELECT * FROM quests WHERE id = ?").get(id)
 
         res.status(200).json({newItemFromDB});
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Failed to update book" });
+        res.status(500).json({ error: "Failed to update quests" });
+    }
+})
+
+app.get("/api/items", (req, res) => {
+    try {
+        const items = db.prepare(
+            "SELECT * FROM items ORDER BY createdAt DESC"
+        ).all()
+
+        return res.status(200).json(items)
+    } catch (err) {
+        console.error(err)
+        return res.status(500).json({ error: "Failed to fetch" })
+    }
+})
+app.delete("/api/items/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const items = db.prepare("SELECT * FROM items WHERE id = ?").get(id)
+        if (!items) return res.status(404).json({ error: "Оружие не найдено" })
+        if (!(['admin'].includes(req.user.role) || req.user.id === items.createdBy)) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
+        db.prepare('DELETE FROM items WHERE id = ?').run(id)
+        return res.status(200).json({ message: 'Удаление завершено!' })
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({ error: "Something went wrong" })
+    }
+})
+app.put("/api/items/:id", auth, (req, res) => {
+    try {
+        const { id } = req.params
+        const items = db.prepare("SELECT * FROM items WHERE id = ?").get(id)
+        if (!items) {
+            return res.status(404).json({ error: "Weapons not found" });
+        }
+        if (req.user.id !== item.userId || !(['admin'].includes(req.user.role))) {
+            return res
+            .status(403)
+            .json({message: 'Доступ запрещен: недостаточно прав'})
+        }
+        const newItem = { ...item, ...req.body }
+        const updateStmt = db.prepare("UPDATE items SET title = ?, type = ?, cost = ?, description = ? WHERE id = ? ")
+        updateStmt.run(
+            newItem.title,
+            newItem.type,
+            newItem.cost,
+            newItem.description,
+            id
+        );
+        const newItemFromDB = db.prepare("SELECT * FROM items WHERE id = ?").get(id)
+
+        res.status(200).json({newItemFromDB});
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to update items" });
     }
 })
 
